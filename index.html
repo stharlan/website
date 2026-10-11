@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en-us">
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Subway Map</title>
+        <style>
+            body, html {
+                width: 100%;
+                height: 100%;
+                padding: 0;
+                margin: 0;
+                background-color: black;
+            }
+        </style>
+        <script type="module" src="https://js.arcgis.com/5.1/"></script>
+        <script src="protobuf.js"></script>
+    </head>
+    <body>
+        <arcgis-map></arcgis-map>
+        <script type="module">
+
+            const trainLines = [
+                "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-nqrw",
+                "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",
+                "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g",
+                "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-ace",
+                "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm",
+                "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz",
+                "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-l",
+                "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si"
+            ];
+
+            async function updateTrainLines()
+            {
+                await updateStations(trainLines[0]);
+                await updateStations(trainLines[1]);
+                await updateStations(trainLines[2]);
+                await updateStations(trainLines[3]);
+                await updateStations(trainLines[4]);
+                await updateStations(trainLines[5]);
+                await updateStations(trainLines[6]);
+                await updateStations(trainLines[7]);
+                setTimeout(updateTrainLines, 5000);
+            }
+
+            async function updateStations(line)
+            {
+
+                const [
+                    SimpleMarkerSymbol, Color, SimpleLineSymbol
+                ] = await $arcgis.import([
+                    "@arcgis/core/symbols/SimpleMarkerSymbol.js",
+                    "@arcgis/core/Color.js",
+                    "@arcgis/core/symbols/SimpleLineSymbol.js"
+                ]);
+
+                const view = document.querySelector("arcgis-map");
+                const map = view.map;
+                const stopLayer = map.findLayerById('subway_stops');
+                
+                const root = await protobuf.load("gtfs-realtime.proto");
+                const fd = await fetch(line);
+                const fb = await fd.bytes();
+                const FeedMessage = root.lookupType("transit_realtime.FeedMessage");
+                const feed = FeedMessage.decode(fb);
+                feed.entity.forEach((e) => {
+
+                    if(e.vehicle && e.vehicle.hasOwnProperty("currentStatus") && (
+                        e.vehicle.currentStatus === 1 || e.vehicle.currentStatus === 0 || e.vehicle.currentStatus === 2))
+                    {
+                        const stopElement = stopLayer.graphics.find(g => g.attributes.stop_id === e.vehicle.stopId);
+                        if(stopElement) {
+                            switch(e.vehicle.currentStatus) {
+                                case 0:
+                                    // 0 = incoming at
+                                    stopElement.symbol = new SimpleMarkerSymbol({
+                                        size: 7,
+                                        color: new Color([0, 0, 0, 0.0]),
+                                        style: "circle",
+                                        outline: new SimpleLineSymbol({
+                                            color: "#ff0",
+                                            width: 1
+                                        })
+                                    });
+                                    break;
+                                case 1:
+                                    // 1 = stopped at
+                                    stopElement.symbol = new SimpleMarkerSymbol({
+                                        size: 9,
+                                        color: new Color([0, 0, 0, 0.0]),
+                                        style: "circle",
+                                        outline: new SimpleLineSymbol({
+                                            color: "#f00",
+                                            width: 1
+                                        })
+                                    });
+                                    break;
+                                case 2:
+                                    // 2 = in transit to
+                                    stopElement.symbol = new SimpleMarkerSymbol({
+                                        size: 5,
+                                        color: new Color([0, 0, 0, 0.0]),
+                                        style: "circle",
+                                        outline: new SimpleLineSymbol({
+                                            color: "#0f0",
+                                            width: 1
+                                        })
+                                    });
+                                    break;
+                                default:
+                                    // 2 = in transit to
+                                    stopElement.symbol = new SimpleMarkerSymbol({
+                                        size: 3,
+                                        color: new Color([0, 0, 0, 0.0]),
+                                        style: "circle",
+                                        outline: new SimpleLineSymbol({
+                                            color: "#666",
+                                            width: 1
+                                        })
+                                    });
+                                    break;
+                            }
+                        }
+                    }
+                });
+            }
+
+            (async () => {
+                const [
+                    Map, SpatialReference, GraphicsLayer, Extent, Polyline, 
+                    SimpleLineSymbol, Graphic, SimpleMarkerSymbol, Point,
+                    OpenStreetMapLayer, Color
+                ] = await $arcgis.import([
+                    "@arcgis/core/Map.js",
+                    "@arcgis/core/geometry/SpatialReference.js",
+                    "@arcgis/core/layers/GraphicsLayer.js",
+                    "@arcgis/core/geometry/Extent.js",
+                    "@arcgis/core/geometry/Polyline.js",
+                    "@arcgis/core/symbols/SimpleLineSymbol.js",
+                    "@arcgis/core/Graphic.js",
+                    "@arcgis/core/symbols/SimpleMarkerSymbol.js",
+                    "@arcgis/core/geometry/Point.js",
+                    "@arcgis/core/layers/OpenStreetMapLayer.js",
+                    "@arcgis/core/Color.js"
+                ]);
+                const subwayLines = new GraphicsLayer({
+                    id: "subway_lines"
+                });
+                const subwayStops = new GraphicsLayer({
+                    id: "subway_stops"
+                });
+                const view = document.querySelector("arcgis-map");
+                view.extent = new Extent({
+                    xmin: -74.0,
+                    xmax: -73.0,
+                    ymin: 40.0,
+                    ymax: 41.0,
+                    spatialReference: SpatialReference.WGS84
+                });
+                view.map = new Map({
+                    spatialReference: SpatialReference.WGS84,
+                    layers: [
+                        //new OpenStreetMapLayer(),
+                        subwayLines,
+                        subwayStops           
+                    ]
+                });
+
+                const rshapes = await fetch("gtfs_subway/shapes.txt");
+                const tshapes = await rshapes.text();
+                const lshapes = tshapes.split('\r\n');
+                let currentSid = "";
+                let path = [];
+                lshapes.forEach((l,i) => {
+                    if(i > 0) {
+                        const tokens = l.split(",");
+                        const sid = tokens[0];
+                        let  px = parseFloat(tokens[3]); // negative, 73.70
+                        let  py = parseFloat(tokens[2]); // positive, 40.47
+                        if(sid !== currentSid) {
+                            // new shape starting
+                            //<line x1="10" y1="10" x2="90" y2="90" stroke="black" stroke-width="2" />
+                            currentSid = sid;
+                            if(path.length > 1) {
+                                // make a polyline from path
+                                const gph = new Graphic({
+                                    geometry: new Polyline({
+                                        paths: [path]
+                                    }),
+                                    symbol: new SimpleLineSymbol({
+                                        color: "#666",
+                                        width: 1
+                                    })
+                                });
+                                subwayLines.add(gph);
+                            }
+                            path = [[px, py]];
+                        } else {
+                            path.push([px, py]);
+                        }
+                    }
+                });
+                if(path.length > 1) {
+                    // make a polyline from path
+                    const gph = new Graphic({
+                        geometry: new Polyline({
+                            paths: [path]
+                        }),
+                        symbol: new SimpleLineSymbol({
+                            color: "#666",
+                            width: 1
+                        })
+                    });
+                    subwayLines.add(gph);
+                }
+
+                const r = await fetch("gtfs_subway/stops.txt");
+                const t = await r.text();
+                const lines = t.split('\r\n');
+                lines.forEach((l, i) => {
+                    if(i > 0)
+                    {
+                        const tokens = l.split(',');
+                        if(tokens[2] !== undefined && tokens[3] !== undefined && tokens[4] !== '1')
+                        {
+                            let  px = parseFloat(tokens[3]); // negative, 73.70
+                            let  py = parseFloat(tokens[2]); // positive, 40.47
+                            const gph = new Graphic({
+                                geometry: new Point({
+                                    x: px,
+                                    y: py,
+                                    spatialReference: SpatialReference.WGS84
+                                }),
+                                symbol: new SimpleMarkerSymbol({
+                                    size: 3,
+                                    color: new Color([0, 0, 0, 0.0]),
+                                    style: "circle",
+                                    outline: new SimpleLineSymbol({
+                                        color: "#666",
+                                        width: 1
+                                    })
+                                }),
+                                attributes: {
+                                    stop_id: tokens[0],
+                                    stop_name: tokens[1],
+                                    location_type: tokens[4],
+                                    parent_station: tokens[5]
+                                }
+                            });
+                            subwayStops.add(gph);
+
+                            // if(tokens[0].endsWith("N"))
+                            // {
+                            //     circle.setAttribute("x", px - 6);
+                            //     circle.setAttribute("y", py - 4);
+                            // } else {
+                            //     circle.setAttribute("x", px);
+                            //     circle.setAttribute("y", py - 4);
+                            // }
+                        }
+                    }
+                });
+
+                setTimeout(updateTrainLines, 5000);
+
+            })();
+        </script>
+    </body>
+</html>
