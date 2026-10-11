@@ -16,7 +16,13 @@
         <script src="protobuf.js"></script>
     </head>
     <body>
-        <arcgis-map></arcgis-map>
+        <arcgis-map>
+            <div style="border-radius:5px;background-color:lightgray;" slot="top-left">
+                This site was created using the ESRI JavaScript API for maps,
+                resources from the MTA Realtime data feeds and the gtfs-realtime
+                protocol buffer specification.
+            </div>
+        </arcgis-map>
         <script type="module">
 
             const trainLines = [
